@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CampusOS | Sign in</title>
+  <style>
+    :root { --bg:#0f172a; --card:#1e293b; --text:#f8fafc; --muted:#94a3b8; --primary:#3b82f6;
+            --danger:#f87171; --ok:#4ade80; --border:#334155; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; padding:16px;
+           font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
+    .card { width:100%; max-width:400px; background:var(--card); border:1px solid var(--border);
+            border-radius:12px; padding:24px; }
+    h1 { margin:0; font-size:1.5rem; }
+    .sub { margin:4px 0 20px; color:var(--muted); font-size:.9rem; }
+    .tabs { display:flex; gap:8px; margin-bottom:8px; }
+    .tab { flex:1; padding:10px; border:1px solid var(--border); background:transparent; color:var(--muted);
+           border-radius:8px; font-size:1rem; cursor:pointer; }
+    .tab.active { background:var(--primary); border-color:var(--primary); color:#fff; }
+    label { display:block; margin:12px 0 4px; font-size:.85rem; color:var(--muted); }
+    input { width:100%; padding:11px; border-radius:8px; border:1px solid var(--border);
+            background:var(--bg); color:var(--text); font-size:1rem; }
+    input:focus { outline:2px solid var(--primary); border-color:transparent; }
+    .btn { width:100%; margin-top:18px; padding:12px; border:0; border-radius:8px; background:var(--primary);
+           color:#fff; font-size:1rem; font-weight:600; cursor:pointer; }
+    .btn:disabled { opacity:.6; cursor:wait; }
+    .btn.secondary { background:transparent; border:1px solid var(--border); color:var(--text); }
+    .msg { margin-top:14px; padding:10px; border-radius:8px; font-size:.9rem; display:none; }
+    .msg.error { display:block; background:rgba(248,113,113,.12); color:var(--danger); }
+    .msg.ok { display:block; background:rgba(74,222,128,.12); color:var(--ok); }
+    .hidden { display:none; }
+    dl { margin:0; }
+    dt { color:var(--muted); font-size:.8rem; margin-top:12px; }
+    dd { margin:2px 0 0; font-size:1rem; word-break:break-all; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>CampusOS</h1>
+    <p class="sub">One Digital Platform for a Smarter Campus</p>
+
+    <section id="auth">
+      <div class="tabs">
+        <button type="button" class="tab active" id="tabLogin">Login</button>
+        <button type="button" class="tab" id="tabRegister">Register</button>
+      </div>
+
+      <form id="form" novalidate>
+        <div id="regFields" class="hidden">
+          <label for="name">Full name</label>
+          <input id="name" autocomplete="name" />
+          <label for="enrollment">Enrollment number (optional)</label>
+          <input id="enrollment" />
+          <label for="department">Department (optional)</label>
+          <input id="department" placeholder="Computer Engineering" />
+          <label for="semester">Semester 1-8 (optional)</label>
+          <input id="semester" type="number" min="1" max="8" />
+        </div>
+
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" />
+        <label for="password">Password (8+ characters, letter and number)</label>
+        <input id="password" type="password" autocomplete="current-password" />
+
+        <button class="btn" id="submitBtn" type="submit">Login</button>
+      </form>
+    </section>
+
+    <section id="profile" class="hidden">
+      <dl>
+        <dt>Name</dt><dd id="pName"></dd>
+        <dt>Email</dt><dd id="pEmail"></dd>
+        <dt>Role</dt><dd id="pRole"></dd>
+        <dt>Token (first 30 characters)</dt><dd id="pToken"></dd>
+      </dl>
+      <button class="btn secondary" id="logoutBtn" type="button">Logout</button>
+    </section>
+
+    <div id="msg" class="msg"></div>
+  </main>
+
+  <script>
+    const API = '/api/auth';
+    const $ = (id) => document.getElementById(id);
+    let mode = 'login';
+
+    function show(type, text) {
+      $('msg').className = 'msg ' + type;
+      $('msg').textContent = text;
+    }
+    function clearMsg() {
+      $('msg').className = 'msg';
+      $('msg').textContent = '';
+    }
+
+    function setMode(m) {
+      mode = m;
+      $('tabLogin').classList.toggle('active', m === 'login');
+      $('tabRegister').classList.toggle('active', m === 'register');
+      $('regFields').classList.toggle('hidden', m !== 'register');
+      $('submitBtn').textContent = m === 'login' ? 'Login' : 'Create account';
+      $('password').autocomplete = m === 'login' ? 'current-password' : 'new-password';
+      clearMsg();
+    }
+
+    function showProfile(user, token) {
+      $('auth').classList.add('hidden');
+      $('profile').classList.remove('hidden');
+      $('pName').textContent = user.name;
+      $('pEmail').textContent = user.email;
+      $('pRole').textContent = user.role;
+      $('pToken').textContent = token.slice(0, 30) + '...';
+    }
+
+    function showAuth() {
+      $('profile').classList.add('hidden');
+      $('auth').classList.remove('hidden');
+      $('password').value = '';
+    }
+
+    $('tabLogin').addEventListener('click', () => setMode('login'));
+    $('tabRegister').addEventListener('click', () => setMode('register'));
+
+    $('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearMsg();
+
+      const body = { email: $('email').value, password: $('password').value };
+      if (mode === 'register') {
+        body.name = $('name').value;
+        body.enrollment_no = $('enrollment').value;
+        body.department = $('department').value;
+        body.semester = $('semester').value;
+      }
+
+      $('submitBtn').disabled = true;
+      try {
+        const res = await fetch(API + '/' + mode, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          show('error', data.error || 'Something went wrong');
+        } else {
+          localStorage.setItem('token', data.token);
+          showProfile(data.user, data.token);
+          show('ok', mode === 'login' ? 'Logged in successfully' : 'Account created successfully');
+        }
+      } catch (err) {
+        show('error', 'Cannot reach the server. Please try again.');
+      } finally {
+        $('submitBtn').disabled = false;
+      }
+    });
+
+    $('logoutBtn').addEventListener('click', () => {
+      localStorage.removeItem('token');
+      showAuth();
+      show('ok', 'Logged out');
+    });
+
+    // On page load: if a token is saved, ask the server who we are
+    (async () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      try {
+        const res = await fetch(API + '/me', { headers: { Authorization: 'Bearer ' + token } });
+        if (res.ok) {
+          const data = await res.json();
+          showProfile(data.user, token);
+        } else {
+          localStorage.removeItem('token');
+        }
+      } catch (err) {
+        /* offline: stay on the login form */
+      }
+    })();
+  </script>
+</body>
+</html>
