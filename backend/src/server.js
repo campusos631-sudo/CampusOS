@@ -25,8 +25,19 @@ app.get('/api/health/db', async (req, res, next) => {
   }
 });
 
+// Categories list (public reference data used by the complaint form)
+app.get('/api/categories', async (req, res, next) => {
+  try {
+    const result = await pool.query('SELECT id, name FROM categories ORDER BY id');
+    res.json({ categories: result.rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // API routes
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/complaints', require('./routes/complaints'));
 
 // Serve the frontend files
 app.use(express.static(path.join(__dirname, '../../frontend')));
