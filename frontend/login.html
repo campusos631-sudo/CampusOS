@@ -25,14 +25,10 @@
     .btn { width:100%; margin-top:18px; padding:12px; border:0; border-radius:8px; background:var(--primary);
            color:#fff; font-size:1rem; font-weight:600; cursor:pointer; }
     .btn:disabled { opacity:.6; cursor:wait; }
-    .btn.secondary { background:transparent; border:1px solid var(--border); color:var(--text); }
     .msg { margin-top:14px; padding:10px; border-radius:8px; font-size:.9rem; display:none; }
     .msg.error { display:block; background:rgba(248,113,113,.12); color:var(--danger); }
     .msg.ok { display:block; background:rgba(74,222,128,.12); color:var(--ok); }
     .hidden { display:none; }
-    dl { margin:0; }
-    dt { color:var(--muted); font-size:.8rem; margin-top:12px; }
-    dd { margin:2px 0 0; font-size:1rem; word-break:break-all; }
   </style>
 </head>
 <body>
@@ -67,16 +63,6 @@
       </form>
     </section>
 
-    <section id="profile" class="hidden">
-      <dl>
-        <dt>Name</dt><dd id="pName"></dd>
-        <dt>Email</dt><dd id="pEmail"></dd>
-        <dt>Role</dt><dd id="pRole"></dd>
-        <dt>Token (first 30 characters)</dt><dd id="pToken"></dd>
-      </dl>
-      <button class="btn secondary" id="logoutBtn" type="button">Logout</button>
-    </section>
-
     <div id="msg" class="msg"></div>
   </main>
 
@@ -94,6 +80,11 @@
       $('msg').textContent = '';
     }
 
+    // Admin goes to the admin page, student goes to the student dashboard
+    function goHome(user) {
+      window.location.href = user.role === 'admin' ? '/admin.html' : '/dashboard.html';
+    }
+
     function setMode(m) {
       mode = m;
       $('tabLogin').classList.toggle('active', m === 'login');
@@ -102,21 +93,6 @@
       $('submitBtn').textContent = m === 'login' ? 'Login' : 'Create account';
       $('password').autocomplete = m === 'login' ? 'current-password' : 'new-password';
       clearMsg();
-    }
-
-    function showProfile(user, token) {
-      $('auth').classList.add('hidden');
-      $('profile').classList.remove('hidden');
-      $('pName').textContent = user.name;
-      $('pEmail').textContent = user.email;
-      $('pRole').textContent = user.role;
-      $('pToken').textContent = token.slice(0, 30) + '...';
-    }
-
-    function showAuth() {
-      $('profile').classList.add('hidden');
-      $('auth').classList.remove('hidden');
-      $('password').value = '';
     }
 
     $('tabLogin').addEventListener('click', () => setMode('login'));
@@ -144,25 +120,18 @@
         const data = await res.json();
         if (!res.ok) {
           show('error', data.error || 'Something went wrong');
+          $('submitBtn').disabled = false;
         } else {
           localStorage.setItem('token', data.token);
-          showProfile(data.user, data.token);
-          show('ok', mode === 'login' ? 'Logged in successfully' : 'Account created successfully');
+          goHome(data.user);
         }
       } catch (err) {
         show('error', 'Cannot reach the server. Please try again.');
-      } finally {
         $('submitBtn').disabled = false;
       }
     });
 
-    $('logoutBtn').addEventListener('click', () => {
-      localStorage.removeItem('token');
-      showAuth();
-      show('ok', 'Logged out');
-    });
-
-    // On page load: if a token is saved, ask the server who we are
+    // On page load: if a valid token is saved, skip the login page
     (async () => {
       const token = localStorage.getItem('token');
       if (!token) return;
@@ -170,7 +139,7 @@
         const res = await fetch(API + '/me', { headers: { Authorization: 'Bearer ' + token } });
         if (res.ok) {
           const data = await res.json();
-          showProfile(data.user, token);
+          goHome(data.user);
         } else {
           localStorage.removeItem('token');
         }
