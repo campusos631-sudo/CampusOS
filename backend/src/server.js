@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const pool = require('./config/db');
+const { authenticate, requireRole } = require('./middleware/auth');
 
 const app = express();
 app.use(express.json());
@@ -35,9 +36,22 @@ app.get('/api/categories', async (req, res, next) => {
   }
 });
 
+// Staff list for assigning complaints (admin only)
+app.get('/api/staff', authenticate, requireRole('admin'), async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, name FROM users WHERE role = 'admin' ORDER BY name`
+    );
+    res.json({ staff: result.rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // API routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/complaints', require('./routes/complaints'));
+app.use('/api/complaints', require('./routes/complaintAdmin'));
 
 // Serve the frontend files
 app.use(express.static(path.join(__dirname, '../../frontend')));
