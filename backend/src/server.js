@@ -25,6 +25,9 @@ app.get('/api/health/db', async (req, res, next) => {
   }
 });
 
+// API routes
+app.use('/api/auth', require('./routes/auth'));
+
 // Serve the frontend files
 app.use(express.static(path.join(__dirname, '../../frontend')));
 
