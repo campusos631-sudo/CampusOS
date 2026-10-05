@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CampusOS | Dashboard</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">CampusOS</span>
+    <span>
+      <span class="who" id="who"></span>
+      <button class="btn secondary" id="logoutBtn" type="button">Logout</button>
+    </span>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <div class="stat"><div class="num" id="sTotal">0</div><div class="lbl">Total complaints</div></div>
+      <div class="stat"><div class="num" id="sPending">0</div><div class="lbl">Pending</div></div>
+      <div class="stat"><div class="num" id="sProgress">0</div><div class="lbl">In progress</div></div>
+      <div class="stat"><div class="num" id="sResolved">0</div><div class="lbl">Resolved</div></div>
+    </div>
+
+    <section class="card">
+      <h2>New complaint</h2>
+      <form id="form" novalidate>
+        <label for="category">Category</label>
+        <select id="category"><option value="">Loading...</option></select>
+
+        <label for="priority">Priority</label>
+        <select id="priority">
+          <option>Low</option>
+          <option selected>Medium</option>
+          <option>High</option>
+          <option>Critical</option>
+        </select>
+
+        <label for="title">Title</label>
+        <input id="title" maxlength="150" placeholder="PC number 12 is not working" />
+
+        <label for="description">Description</label>
+        <textarea id="description" maxlength="2000" placeholder="Describe the problem"></textarea>
+
+        <button class="btn block" id="submitBtn" type="submit">Submit complaint</button>
+      </form>
+      <div id="msg" class="msg"></div>
+    </section>
+
+    <section class="card hidden" id="detailCard">
+      <h2 id="dTitle"></h2>
+      <div id="dBody"></div>
+      <button class="btn secondary block" id="closeDetail" type="button">Close</button>
+    </section>
+
+    <section class="card">
+      <h2>My complaints</h2>
+      <div id="list"><div class="empty">Loading...</div></div>
+    </section>
+  </main>
+
+  <script src="/js/app.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let complaints = [];
+
+    function renderStats() {
+      $('sTotal').textContent = complaints.length;
+      $('sPending').textContent = complaints.filter(c => c.status === 'Reported' || c.status === 'Assigned').length;
+      $('sProgress').textContent = complaints.filter(c => c.status === 'In Progress').length;
+      $('sResolved').textContent = complaints.filter(c => c.status === 'Resolved').length;
+    }
+
+    function renderList() {
+      if (complaints.length === 0) {
+        $('list').innerHTML = '<div class="empty">No complaints yet. Submit your first one above.</div>';
+        return;
+      }
+      $('list').innerHTML = complaints.map(c => `
+        <div class="item" data-id="${c.id}">
+          <div class="row">
+            <span class="ticket">${esc(c.ticket_id)}</span>
+            ${statusBadge(c.status)}
+          </div>
+          <div class="title">${esc(c.title)}</div>
+          <div class="ticket">${esc(c.category)} &middot;
+            <span class="p-${esc(c.priority.toLowerCase())}">${esc(c.priority)}</span>
+            &middot; ${fmtDate(c.created_at)}</div>
+        </div>`).join('');
+    }
+
+    async function loadCategories() {
+      const r = await api('/categories');
+      if (!r.ok) return;
+      $('category').innerHTML = '<option value="">Select category</option>' +
+        r.data.categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    }
+
+    async function loadComplaints() {
+      const r = await api('/complaints');
+      if (!r.ok) {
+        $('list').innerHTML = '<div class="empty">Could not load complaints.</div>';
+        return;
+      }
+      complaints = r.data.complaints;
+      renderStats();
+      renderList();
+    }
+
+    async function openDetail(id) {
+      const r = await api('/complaints/' + id);
+      if (!r.ok) return;
+      const { complaint: c, timeline, feedback } = r.data;
+
+      $('dTitle').textContent = c.ticket_id + ' | ' + c.title;
+      $('dBody').innerHTML = `
+        <p>${statusBadge(c.status)}</p>
+        <p class="ticket">${esc(c.category)} &middot; Priority: ${esc(c.priority)}
+          &middot; Assigned to: ${esc(c.assigned_to_name || 'Not assigned yet')}</p>
+        <p>${esc(c.description)}</p>
+        <h2>Status timeline</h2>
+        <ul class="timeline">
+          ${timeline.map(t => `
+            <li>${statusBadge(t.status)}
+              <div>${esc(t.note || '')}</div>
+              <div class="ticket">${fmtDate(t.created_at)}${t.updated_by_name ? ' &middot; ' + esc(t.updated_by_name) : ''}</div>
+            </li>`).join('')}
+        </ul>
+        ${feedback ? `<p><strong>Your rating:</strong> ${feedback.rating}/5 ${esc(feedback.comment || '')}</p>` : ''}`;
+
+      $('detailCard').classList.remove('hidden');
+      $('detailCard').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    $('list').addEventListener('click', (e) => {
+      const item = e.target.closest('.item');
+      if (item) openDetail(item.dataset.id);
+    });
+    $('closeDetail').addEventListener('click', () => $('detailCard').classList.add('hidden'));
+    $('logoutBtn').addEventListener('click', logout);
+
+    $('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $('msg').className = 'msg';
+
+      const body = {
+        category_id: Number($('category').value),
+        priority: $('priority').value,
+        title: $('title').value,
+        description: $('description').value,
+      };
+
+      $('submitBtn').disabled = true;
+      const r = await api('/complaints', { method: 'POST', body: JSON.stringify(body) });
+      $('submitBtn').disabled = false;
+
+      if (!r.ok) {
+        showMsg($('msg'), 'error', r.data.error || 'Could not submit complaint');
+        return;
+      }
+      showMsg($('msg'), 'ok', 'Complaint submitted. Ticket ID: ' + r.data.complaint.ticket_id);
+      $('form').reset();
+      loadComplaints();
+    });
+
+    (async () => {
+      const user = await requireLogin('student');
+      if (!user) return;
+      $('who').textContent = user.name;
+      loadCategories();
+      loadComplaints();
+    })();
+  </script>
+</body>
+</html>
