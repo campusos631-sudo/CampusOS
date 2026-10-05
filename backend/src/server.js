@@ -1,17 +1,28 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const pool = require('./config/db');
 
 const app = express();
 app.use(express.json());
 
-// Health check: used to confirm the API is running
+// Health check: confirms the API is running
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'CampusOS API',
     time: new Date().toISOString(),
   });
+});
+
+// Database health check: confirms the API can reach PostgreSQL
+app.get('/api/health/db', async (req, res, next) => {
+  try {
+    const result = await pool.query('SELECT COUNT(*)::int AS categories FROM categories');
+    res.json({ status: 'ok', database: 'connected', categories: result.rows[0].categories });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // Serve the frontend files
