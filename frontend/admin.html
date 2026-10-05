@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CampusOS | Admin</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">CampusOS Admin</span>
+    <span>
+      <span class="who" id="who"></span>
+      <button class="btn secondary" id="logoutBtn" type="button">Logout</button>
+    </span>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Search and filter</h2>
+      <label for="q">Search (title or ticket ID)</label>
+      <input id="q" placeholder="e.g. PC number or CMP-2026-00001" />
+      <label for="fStatus">Status</label>
+      <select id="fStatus">
+        <option value="">All</option>
+        <option>Reported</option><option>Assigned</option><option>In Progress</option>
+        <option>Resolved</option><option>Rejected</option>
+      </select>
+      <label for="fPriority">Priority</label>
+      <select id="fPriority">
+        <option value="">All</option>
+        <option>Low</option><option>Medium</option><option>High</option><option>Critical</option>
+      </select>
+      <label for="fCategory">Category</label>
+      <select id="fCategory"><option value="">All</option></select>
+    </section>
+
+    <section class="card hidden" id="detailCard">
+      <h2 id="dTitle"></h2>
+      <div id="dBody"></div>
+      <div id="controls"></div>
+      <div id="dMsg" class="msg"></div>
+      <button class="btn secondary block" id="closeDetail" type="button">Close</button>
+    </section>
+
+    <section class="card">
+      <h2>All complaints <span class="who" id="count"></span></h2>
+      <div id="list"><div class="empty">Loading...</div></div>
+    </section>
+  </main>
+
+  <script src="/js/app.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let currentId = null;
+    let staff = [];
+    let timer = null;
+
+    async function loadFilters() {
+      const r = await api('/categories');
+      if (r.ok) {
+        $('fCategory').innerHTML = '<option value="">All</option>' +
+          r.data.categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+      }
+      const s = await api('/staff');
+      if (s.ok) staff = s.data.staff;
+    }
+
+    async function loadList() {
+      const params = new URLSearchParams();
+      if ($('q').value.trim()) params.set('q', $('q').value.trim());
+      if ($('fStatus').value) params.set('status', $('fStatus').value);
+      if ($('fPriority').value) params.set('priority', $('fPriority').value);
+      if ($('fCategory').value) params.set('category_id', $('fCategory').value);
+
+      const r = await api('/complaints?' + params.toString());
+      if (!r.ok) {
+        $('list').innerHTML = '<div class="empty">Could not load complaints.</div>';
+        return;
+      }
+      const list = r.data.complaints;
+      $('count').textContent = '(' + list.length + ')';
+      if (list.length === 0) {
+        $('list').innerHTML = '<div class="empty">No complaints match your filters.</div>';
+        return;
+      }
+      $('list').innerHTML = list.map(c => `
+        <div class="item" data-id="${c.id}">
+          <div class="row">
+            <span class="ticket">${esc(c.ticket_id)}</span>
+            ${statusBadge(c.status)}
+          </div>
+          <div class="title">${esc(c.title)}</div>
+          <div class="ticket">${esc(c.category)} &middot;
+            <span class="p-${esc(c.priority.toLowerCase())}">${esc(c.priority)}</span>
+            &middot; ${esc(c.student_name)} &middot; ${fmtDate(c.created_at)}</div>
+        </div>`).join('');
+    }
+
+    function options(values, selected) {
+      return values.map(v => `<option${v === selected ? ' selected' : ''}>${esc(v)}</option>`).join('');
+    }
+
+    async function openDetail(id) {
+      const r = await api('/complaints/' + id);
+      if (!r.ok) return;
+      currentId = id;
+      const { complaint: c, timeline, feedback } = r.data;
+
+      $('dTitle').textContent = c.ticket_id + ' | ' + c.title;
+      $('dBody').innerHTML = `
+        <p>${statusBadge(c.status)}</p>
+        <p class="ticket">${esc(c.category)} &middot; Priority: ${esc(c.priority)}
+          &middot; Student: ${esc(c.student_name)}
+          &middot; Assigned to: ${esc(c.assigned_to_name || 'Not assigned yet')}</p>
+        <p>${esc(c.description)}</p>
+        <h2>Status timeline</h2>
+        <ul class="timeline">
+          ${timeline.map(t => `
+            <li>${statusBadge(t.status)}
+              <div>${esc(t.note || '')}</div>
+              <div class="ticket">${fmtDate(t.created_at)}${t.updated_by_name ? ' &middot; ' + esc(t.updated_by_name) : ''}</div>
+            </li>`).join('')}
+        </ul>
+        ${feedback ? `<p><strong>Student rating:</strong> ${feedback.rating}/5 ${esc(feedback.comment || '')}</p>` : ''}`;
+
+      const closed = c.status === 'Resolved' || c.status === 'Rejected';
+      if (closed) {
+        $('controls').innerHTML = '<p class="ticket">This complaint is closed and cannot be changed.</p>';
+      } else {
+        $('controls').innerHTML = `
+          <h2>Update complaint</h2>
+          <label for="newStatus">Status</label>
+          <select id="newStatus">${options(['Reported', 'Assigned', 'In Progress', 'Resolved', 'Rejected'], c.status)}</select>
+          <label for="note">Note for the student (optional)</label>
+          <input id="note" maxlength="500" placeholder="e.g. Technician will visit today" />
+          <button class="btn block" id="btnStatus" type="button">Update status</button>
+
+          <label for="assignTo">Assign to</label>
+          <select id="assignTo">
+            <option value="">Select staff member</option>
+            ${staff.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}
+          </select>
+          <button class="btn block" id="btnAssign" type="button">Assign</button>
+
+          <label for="newPriority">Priority</label>
+          <select id="newPriority">${options(['Low', 'Medium', 'High', 'Critical'], c.priority)}</select>
+          <button class="btn block" id="btnPriority" type="button">Update priority</button>`;
+
+        $('btnStatus').addEventListener('click', () =>
+          act('/status', { status: $('newStatus').value, note: $('note').value }, 'Status updated'));
+        $('btnAssign').addEventListener('click', () => {
+          if (!$('assignTo').value) return showMsg($('dMsg'), 'error', 'Select a staff member first');
+          act('/assign', { assigned_to: Number($('assignTo').value) }, 'Complaint assigned');
+        });
+        $('btnPriority').addEventListener('click', () =>
+          act('/priority', { priority: $('newPriority').value }, 'Priority updated'));
+      }
+
+      $('dMsg').className = 'msg';
+      $('detailCard').classList.remove('hidden');
+      $('detailCard').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    async function act(path, body, okText) {
+      const r = await api('/complaints/' + currentId + path, { method: 'PUT', body: JSON.stringify(body) });
+      if (!r.ok) {
+        showMsg($('dMsg'), 'error', r.data.error || 'Update failed');
+        return;
+      }
+      await loadList();
+      await openDetail(currentId);
+      showMsg($('dMsg'), 'ok', okText);
+    }
+
+    $('list').addEventListener('click', (e) => {
+      const item = e.target.closest('.item');
+      if (item) openDetail(item.dataset.id);
+    });
+    $('closeDetail').addEventListener('click', () => $('detailCard').classList.add('hidden'));
+    $('logoutBtn').addEventListener('click', logout);
+
+    $('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(loadList, 400); });
+    ['fStatus', 'fPriority', 'fCategory'].forEach(id => $(id).addEventListener('change', loadList));
+
+    (async () => {
+      const user = await requireLogin('admin');
+      if (!user) return;
+      $('who').textContent = user.name;
+      await loadFilters();
+      loadList();
+    })();
+  </script>
+</body>
+</html>
