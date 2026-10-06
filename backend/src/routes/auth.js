@@ -40,24 +40,27 @@ const loginRules = [
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
-// POST /api/auth/register: creates a student account
+// POST /api/auth/register: creates a student or teacher account (never an admin)
 router.post('/register', registerRules, validate, async (req, res, next) => {
   try {
     const { name, email, password, enrollment_no, department, semester } = req.body;
+
+    // Only 'teacher' is accepted. Anything else (including 'admin') becomes 'student'.
+    const role = req.body.role === 'teacher' ? 'teacher' : 'student';
 
     const exists = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (exists.rows.length > 0) {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
-    // Password is hashed, never stored as plain text. The role is always 'student' here.
+    // Password is hashed, never stored as plain text.
     const passwordHash = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
       `INSERT INTO users (name, email, password_hash, role, enrollment_no, department, semester)
-       VALUES ($1, $2, $3, 'student', $4, $5, $6)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, name, email, role, enrollment_no, department, semester`,
-      [name, email, passwordHash, enrollment_no || null, department || null, semester || null]
+      [name, email, passwordHash, role, enrollment_no || null, department || null, semester || null]
     );
 
     const user = result.rows[0];
