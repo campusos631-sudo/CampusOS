@@ -7,9 +7,11 @@
   <link rel="stylesheet" href="/css/style.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
-    .nav a { color: var(--muted); text-decoration: none; margin-right: 12px; font-size: .9rem; }
-    .nav a.active { color: var(--text); font-weight: 600; }
     .chart-box { position: relative; height: 260px; }
+    .fb { padding: 12px 0; border-top: 1px solid var(--border); }
+    .fb:first-child { border-top: 0; }
+    .fb .stars { color: var(--warn); letter-spacing: 2px; }
+    .fb .comment { margin: 4px 0; }
   </style>
 </head>
 <body>
@@ -17,7 +19,7 @@
     <span>
       <span class="brand"><img src="/img/logo.jpg" alt="KDP logo" />KDP CampusOS</span>
       <span class="nav">
-                        &nbsp;<a href="/admin.html">Complaints</a>
+        &nbsp;<a href="/admin.html">Complaints</a>
         <a href="/analytics.html" class="active">Analytics</a>
         <a href="/announcements.html">Announcements</a>
         <a href="/events.html">Events</a>
@@ -54,6 +56,11 @@
     <section class="card">
       <h2>Complaints by priority</h2>
       <div class="chart-box"><canvas id="priorityChart"></canvas></div>
+    </section>
+
+    <section class="card">
+      <h2>Student feedback <span class="who" id="fbCount"></span></h2>
+      <div id="fbList"><div class="empty">Loading...</div></div>
     </section>
 
     <div id="msg" class="msg"></div>
@@ -117,12 +124,34 @@
       });
     }
 
+    async function loadFeedback() {
+      const r = await api('/feedback');
+      if (!r.ok) {
+        $('fbList').innerHTML = '<div class="empty">Could not load feedback.</div>';
+        return;
+      }
+      const { feedback, average, count } = r.data;
+      $('fbCount').textContent = count === 0 ? '' : '(' + count + ' reviews, average ' + average + ' / 5)';
+      if (feedback.length === 0) {
+        $('fbList').innerHTML = '<div class="empty">No feedback yet. Students can rate a complaint after it is resolved.</div>';
+        return;
+      }
+      $('fbList').innerHTML = feedback.map(f => `
+        <div class="fb">
+          <div class="stars">${'★'.repeat(f.rating)}${'☆'.repeat(5 - f.rating)}</div>
+          ${f.comment ? `<div class="comment">${esc(f.comment)}</div>` : ''}
+          <div class="ticket">${esc(f.ticket_id)} &middot; ${esc(f.title)} &middot; ${esc(f.student_name)} &middot; ${fmtDate(f.created_at)}</div>
+        </div>`).join('');
+    }
+
     $('logoutBtn').addEventListener('click', logout);
 
     (async () => {
       const user = await requireLogin('admin');
       if (!user) return;
       $('who').textContent = user.name;
+
+      loadFeedback();
 
       const r = await api('/analytics/summary');
       if (!r.ok) {
