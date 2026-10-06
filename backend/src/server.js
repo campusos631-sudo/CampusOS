@@ -55,6 +55,7 @@ app.use('/api/complaints', require('./routes/complaintAdmin'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/announcements', require('./routes/announcements'));
 app.use('/api/events', require('./routes/events'));
+app.use('/api/feedback', require('./routes/feedback'));
 
 // Serve the frontend files
 app.use(express.static(path.join(__dirname, '../../frontend')));
