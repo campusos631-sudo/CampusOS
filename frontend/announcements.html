@@ -55,8 +55,8 @@
 
     function buildNav(role) {
       const links = role === 'admin'
-        ? [['/admin.html', 'Complaints'], ['/analytics.html', 'Analytics'], ['/announcements.html', 'Announcements']]
-        : [['/dashboard.html', 'Dashboard'], ['/announcements.html', 'Announcements']];
+                ? [['/admin.html', 'Complaints'], ['/analytics.html', 'Analytics'], ['/announcements.html', 'Announcements'], ['/events.html', 'Events']]
+        : [['/dashboard.html', 'Dashboard'], ['/announcements.html', 'Announcements'], ['/events.html', 'Events']];
       $('nav').innerHTML = '&nbsp;' + links.map(([href, label]) =>
         `<a href="${href}"${href === '/announcements.html' ? ' class="active"' : ''}>${label}</a>`).join('');
     }
