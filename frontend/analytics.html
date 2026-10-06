@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KDP CampusOS | Analytics</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    .nav a { color: var(--muted); text-decoration: none; margin-right: 12px; font-size: .9rem; }
+    .nav a.active { color: var(--text); font-weight: 600; }
+    .chart-box { position: relative; height: 260px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <span>
+      <span class="brand">KDP CampusOS</span>
+      <span class="nav">
+        &nbsp;<a href="/admin.html">Complaints</a>
+        <a href="/analytics.html" class="active">Analytics</a>
+      </span>
+    </span>
+    <span>
+      <span class="who" id="who"></span>
+      <button class="btn secondary" id="logoutBtn" type="button">Logout</button>
+    </span>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <div class="stat"><div class="num" id="sTotal">-</div><div class="lbl">Total complaints</div></div>
+      <div class="stat"><div class="num" id="sPending">-</div><div class="lbl">Pending</div></div>
+      <div class="stat"><div class="num" id="sProgress">-</div><div class="lbl">In progress</div></div>
+      <div class="stat"><div class="num" id="sResolved">-</div><div class="lbl">Resolved</div></div>
+      <div class="stat"><div class="num" id="sRate">-</div><div class="lbl">Resolution rate</div></div>
+      <div class="stat"><div class="num" id="sAvg">-</div><div class="lbl">Avg resolution time</div></div>
+      <div class="stat"><div class="num" id="sHigh">-</div><div class="lbl">Open High/Critical</div></div>
+      <div class="stat"><div class="num" id="sRating">-</div><div class="lbl">Avg student rating</div></div>
+    </div>
+
+    <section class="card">
+      <h2>Complaints by status</h2>
+      <div class="chart-box"><canvas id="statusChart"></canvas></div>
+    </section>
+
+    <section class="card">
+      <h2>Complaints by category</h2>
+      <div class="chart-box"><canvas id="categoryChart"></canvas></div>
+    </section>
+
+    <section class="card">
+      <h2>Complaints by priority</h2>
+      <div class="chart-box"><canvas id="priorityChart"></canvas></div>
+    </section>
+
+    <div id="msg" class="msg"></div>
+  </main>
+
+  <script src="/js/app.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function fmtHours(h) {
+      if (h === null) return '-';
+      if (h < 1) return Math.round(h * 60) + ' min';
+      return h + ' h';
+    }
+
+    function drawCharts(d) {
+      Chart.defaults.color = '#94a3b8';
+      Chart.defaults.borderColor = '#334155';
+
+      new Chart($('statusChart'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Pending', 'In Progress', 'Resolved', 'Rejected'],
+          datasets: [{
+            data: [d.pending, d.in_progress, d.resolved, d.rejected],
+            backgroundColor: ['#94a3b8', '#fbbf24', '#4ade80', '#f87171'],
+            borderWidth: 0,
+          }],
+        },
+        options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
+      });
+
+      new Chart($('categoryChart'), {
+        type: 'bar',
+        data: {
+          labels: d.by_category.map(c => c.name),
+          datasets: [{ label: 'Complaints', data: d.by_category.map(c => c.count), backgroundColor: '#3b82f6' }],
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+        },
+      });
+
+      new Chart($('priorityChart'), {
+        type: 'bar',
+        data: {
+          labels: ['Low', 'Medium', 'High', 'Critical'],
+          datasets: [{
+            label: 'Complaints',
+            data: ['Low', 'Medium', 'High', 'Critical'].map(p => (d.by_priority.find(x => x.priority === p) || { count: 0 }).count),
+            backgroundColor: ['#94a3b8', '#3b82f6', '#fbbf24', '#f87171'],
+          }],
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+        },
+      });
+    }
+
+    $('logoutBtn').addEventListener('click', logout);
+
+    (async () => {
+      const user = await requireLogin('admin');
+      if (!user) return;
+      $('who').textContent = user.name;
+
+      const r = await api('/analytics/summary');
+      if (!r.ok) {
+        showMsg($('msg'), 'error', r.data.error || 'Could not load analytics');
+        return;
+      }
+      const d = r.data;
+      $('sTotal').textContent = d.total;
+      $('sPending').textContent = d.pending;
+      $('sProgress').textContent = d.in_progress;
+      $('sResolved').textContent = d.resolved;
+      $('sRate').textContent = d.resolution_rate + '%';
+      $('sAvg').textContent = fmtHours(d.avg_resolution_hours);
+      $('sHigh').textContent = d.high_priority;
+      $('sRating').textContent = d.feedback.average === null ? '-' : d.feedback.average + ' / 5';
+
+      if (typeof Chart === 'undefined') {
+        showMsg($('msg'), 'error', 'Charts could not load. Check your internet and refresh.');
+        return;
+      }
+      drawCharts(d);
+    })();
+  </script>
+</body>
+</html>
