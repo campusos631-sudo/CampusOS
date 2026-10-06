@@ -24,6 +24,15 @@ const createRules = [
   body('title').trim().isLength({ min: 5, max: 150 }).withMessage('Title must be 5 to 150 characters'),
   body('description').trim().isLength({ min: 10, max: 2000 }).withMessage('Description must be 10 to 2000 characters'),
   body('priority').optional({ values: 'falsy' }).isIn(PRIORITIES).withMessage('Invalid priority'),
+  // The photo link must point to this user's own folder in our storage bucket
+  body('image_url').optional({ values: 'falsy' }).isString().custom((value, { req }) => {
+    const base = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+    const allowed = `${base}/storage/v1/object/public/complaint-images/${req.user.id}/`;
+    if (!base || value.length > 300 || !value.startsWith(allowed) || value.includes('..')) {
+      throw new Error('Invalid image');
+    }
+    return true;
+  }),
 ];
 
 const listRules = [
@@ -41,15 +50,16 @@ router.post('/', requireRole('student', 'teacher'), createRules, validate, async
   try {
     const { category_id, title, description } = req.body;
     const priority = req.body.priority || 'Medium';
+    const imageUrl = req.body.image_url || null;
 
     // Transaction: complaint, first timeline entry and notification are saved together or not at all
     await client.query('BEGIN');
 
     const created = await client.query(
-      `INSERT INTO complaints (user_id, category_id, title, description, priority)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO complaints (user_id, category_id, title, description, priority, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, ticket_id, title, priority, status, created_at`,
-      [req.user.id, category_id, title, description, priority]
+      [req.user.id, category_id, title, description, priority, imageUrl]
     );
     const complaint = created.rows[0];
 
