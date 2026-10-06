@@ -52,6 +52,7 @@ app.get('/api/staff', authenticate, requireRole('admin'), async (req, res, next)
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/complaints', require('./routes/complaints'));
 app.use('/api/complaints', require('./routes/complaintAdmin'));
+app.use('/api/analytics', require('./routes/analytics'));
 
 // Serve the frontend files
 app.use(express.static(path.join(__dirname, '../../frontend')));
