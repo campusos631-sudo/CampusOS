@@ -53,6 +53,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/complaints', require('./routes/complaints'));
 app.use('/api/complaints', require('./routes/complaintAdmin'));
 app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/announcements', require('./routes/announcements'));
 
 // Serve the frontend files
 app.use(express.static(path.join(__dirname, '../../frontend')));
