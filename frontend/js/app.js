@@ -22,7 +22,9 @@ async function api(path, options = {}) {
   return { ok: res.ok, status: res.status, data };
 }
 
-// Page guard: returns the logged-in user, or redirects to login
+// Page guard: returns the logged-in user, or redirects to login.
+// role 'admin' means admin only. Any other value (like 'student') means any non-admin user
+// (student or teacher), so teachers can use the normal dashboard.
 async function requireLogin(role) {
   if (!getToken()) {
     window.location.href = '/login.html';
@@ -30,8 +32,9 @@ async function requireLogin(role) {
   }
   const r = await api('/auth/me');
   if (!r.ok) return null;
-  if (role && r.data.user.role !== role) {
-    window.location.href = r.data.user.role === 'admin' ? '/admin.html' : '/dashboard.html';
+  const isAdmin = r.data.user.role === 'admin';
+  if (role && (role === 'admin') !== isAdmin) {
+    window.location.href = isAdmin ? '/admin.html' : '/dashboard.html';
     return null;
   }
   return r.data.user;
