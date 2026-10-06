@@ -12,6 +12,8 @@ const app = express();
 app.set('trust proxy', 1);
 
 // Security headers. Our pages use inline scripts/styles and Chart.js from cdnjs, so those are allowed.
+// Complaint photos are loaded from our Supabase Storage bucket.
+const supabaseOrigin = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -19,16 +21,13 @@ app.use(
       directives: {
         'script-src': ["'self'", "'unsafe-inline'", 'https://cdnjs.cloudflare.com'],
         'style-src': ["'self'", "'unsafe-inline'"],
-        'img-src': ["'self'", 'data:'],
+        'img-src': ["'self'", 'data:', 'blob:'].concat(supabaseOrigin ? [supabaseOrigin] : []),
       },
     },
   })
 );
 
-// Limit request body size
-app.use(express.json({ limit: '100kb' }));
-
-// Rate limiting: slows down password guessing and fake account creation
+// Rate limiting: slows down password guessing, fake accounts and upload abuse
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -44,6 +43,21 @@ const registerLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many accounts created from this network. Please try again later.' },
 });
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many uploads. Please try again later.' },
+});
+
+// The upload route accepts a bigger JSON body (the photo is sent as base64),
+// so it is mounted BEFORE the global 100 KB body limit below.
+app.use('/api/uploads', uploadLimiter, express.json({ limit: '1.5mb' }), require('./routes/uploads'));
+
+// Limit request body size for every other route
+app.use(express.json({ limit: '100kb' }));
+
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/register', registerLimiter);
 
