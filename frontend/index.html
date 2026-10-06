@@ -3,18 +3,54 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KDP CampusOS</title>
+  <title>KDP CampusOS | Smart College Service Platform</title>
+  <link rel="stylesheet" href="/css/style.css" />
   <style>
-    body { font-family: system-ui, sans-serif; display: grid; place-items: center;
-           min-height: 100vh; margin: 0; background: #0f172a; color: #f8fafc; text-align: center; }
-    h1 { margin: 0 0 8px; font-size: 2rem; }
-    p { margin: 0; color: #94a3b8; }
+    .hero { text-align: center; padding: 36px 8px 24px; }
+    .hero img { width: 110px; height: 110px; border-radius: 50%; background: #fff; object-fit: cover;
+                box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+    .hero h1 { margin: 16px 0 4px; font-size: 2rem; }
+    .hero .college { color: var(--muted); margin: 0; }
+    .hero .tag { margin: 12px auto 22px; max-width: 520px; font-size: 1.05rem; }
+    .cta { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .cta a { text-decoration: none; display: inline-block; }
+    .features { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 28px; }
+    @media (min-width: 700px) { .features { grid-template-columns: repeat(3, 1fr); } }
+    .features .card { margin: 0; }
+    .features h2 { font-size: 1rem; margin-bottom: 6px; }
+    .features p { margin: 0; color: var(--muted); font-size: .9rem; }
+    footer { text-align: center; color: var(--muted); font-size: .8rem; padding: 24px 0 8px; }
   </style>
 </head>
 <body>
-  <div>
-    <h1>KDP CampusOS</h1>
-    <p>One Digital Platform for a Smarter Campus</p>
-  </div>
+  <main class="container">
+    <section class="hero">
+      <img src="/img/logo.jpg" alt="KDP logo" />
+      <h1>KDP CampusOS</h1>
+      <p class="college">Kilachand Devchand Polytechnic, Patan</p>
+      <p class="tag">One Digital Platform for a Smarter Campus. Report campus problems, track them live, and get them resolved faster.</p>
+      <div class="cta">
+        <a class="btn" href="/login.html">Login</a>
+        <a class="btn secondary" href="/login.html">Create account</a>
+      </div>
+    </section>
+
+    <section class="features">
+      <div class="card">
+        <h2>Report in seconds</h2>
+        <p>Submit a complaint with category and priority. Every complaint gets a unique ticket ID.</p>
+      </div>
+      <div class="card">
+        <h2>Track every step</h2>
+        <p>See the full status timeline from Reported to Resolved, with notes from the admin.</p>
+      </div>
+      <div class="card">
+        <h2>Data-driven admin</h2>
+        <p>Admins assign, prioritise and resolve complaints, with live analytics from the database.</p>
+      </div>
+    </section>
+
+    <footer>KDP CampusOS &middot; Diploma Computer Engineering Project</footer>
+  </main>
 </body>
 </html>
