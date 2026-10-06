@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KDP CampusOS | Events</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    .ev { padding: 14px; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; background: #0e1626; }
+    .ev .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .ev .meta { color: var(--muted); font-size: .85rem; margin: 4px 0; }
+    .ev .desc { margin: 6px 0; white-space: pre-wrap; }
+    .ev .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .ev .actions .btn { padding: 8px 14px; font-size: .85rem; }
+    .ev.past { opacity: .6; }
+    .b-ok { background: rgba(74, 222, 128, .2); color: var(--ok); }
+    .b-full { background: rgba(248, 113, 113, .2); color: var(--danger); }
+    .b-past { background: rgba(148, 163, 184, .2); color: #cbd5e1; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .people { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; font-size: .88rem; }
+    .people div { padding: 6px 0; border-bottom: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <span>
+      <span class="brand"><img src="/img/logo.jpg" alt="KDP logo" />KDP CampusOS</span>
+      <span class="nav" id="nav"></span>
+    </span>
+    <span>
+      <span class="who" id="who"></span>
+      <button class="btn secondary" id="logoutBtn" type="button">Logout</button>
+    </span>
+  </header>
+
+  <main class="container">
+    <section class="card hidden" id="createCard">
+      <h2>Create event</h2>
+      <form id="form" novalidate>
+        <label for="title">Title</label>
+        <input id="title" maxlength="150" placeholder="Annual Technical Fest" />
+        <label for="description">Description</label>
+        <textarea id="description" maxlength="2000" placeholder="What is this event about?"></textarea>
+        <div class="row2">
+          <div><label for="date">Date</label><input id="date" type="date" /></div>
+          <div><label for="time">Time</label><input id="time" type="time" /></div>
+        </div>
+        <label for="location">Location</label>
+        <input id="location" maxlength="150" placeholder="Seminar Hall" />
+        <label for="capacity">Capacity</label>
+        <input id="capacity" type="number" min="1" max="10000" placeholder="100" />
+        <button class="btn block" id="submitBtn" type="submit">Create event</button>
+      </form>
+      <div id="msg" class="msg"></div>
+    </section>
+
+    <section class="card">
+      <h2>Events</h2>
+      <div id="notice" class="msg"></div>
+      <div id="list"><div class="empty">Loading...</div></div>
+    </section>
+  </main>
+
+  <script src="/js/app.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let isAdmin = false;
+
+    function buildNav(role) {
+      const links = role === 'admin'
+        ? [['/admin.html', 'Complaints'], ['/analytics.html', 'Analytics'], ['/announcements.html', 'Announcements'], ['/events.html', 'Events']]
+        : [['/dashboard.html', 'Dashboard'], ['/announcements.html', 'Announcements'], ['/events.html', 'Events']];
+      $('nav').innerHTML = '&nbsp;' + links.map(([href, label]) =>
+        `<a href="${href}"${href === '/events.html' ? ' class="active"' : ''}>${label}</a>`).join('');
+    }
+
+    function fmtEventDate(d, t) {
+      const date = new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { dateStyle: 'medium' });
+      return date + ' at ' + t;
+    }
+
+    function eventHtml(e) {
+      const full = e.registered >= e.capacity;
+      let badge = '';
+      if (e.is_past) badge = '<span class="badge b-past">Past</span>';
+      else if (e.is_registered) badge = '<span class="badge b-ok">Registered</span>';
+      else if (full) badge = '<span class="badge b-full">Full</span>';
+
+      let actions = '';
+      if (isAdmin) {
+        actions = `<button class="btn secondary" data-action="people" data-id="${e.id}" type="button">Participants</button>
+                   <button class="btn secondary" data-action="delete" data-id="${e.id}" type="button">Delete</button>`;
+      } else if (!e.is_past) {
+        if (e.is_registered) {
+          actions = `<button class="btn secondary" data-action="cancel" data-id="${e.id}" type="button">Cancel registration</button>`;
+        } else if (full) {
+          actions = '<button class="btn secondary" type="button" disabled>Event is full</button>';
+        } else {
+          actions = `<button class="btn" data-action="register" data-id="${e.id}" type="button">Register</button>`;
+        }
+      }
+
+      return `
+        <div class="ev${e.is_past ? ' past' : ''}" id="ev-${e.id}">
+          <div class="head"><strong>${esc(e.title)}</strong>${badge}</div>
+          <div class="meta">${esc(fmtEventDate(e.event_date, e.event_time))} &middot; ${esc(e.location)}</div>
+          <div class="meta">Seats: ${e.registered} / ${e.capacity} registered</div>
+          ${e.description ? `<div class="desc">${esc(e.description)}</div>` : ''}
+          <div class="actions">${actions}</div>
+          <div class="people hidden" id="people-${e.id}"></div>
+        </div>`;
+    }
+
+    async function loadList() {
+      const r = await api('/events');
+      if (!r.ok) {
+        $('list').innerHTML = '<div class="empty">Could not load events.</div>';
+        return;
+      }
+      const events = r.data.events;
+      if (events.length === 0) {
+        $('list').innerHTML = '<div class="empty">No events yet.</div>';
+        return;
+      }
+      // Upcoming events first, past events at the bottom
+      const upcoming = events.filter(e => !e.is_past);
+      const past = events.filter(e => e.is_past);
+      $('list').innerHTML = upcoming.concat(past).map(eventHtml).join('');
+    }
+
+    async function showPeople(id) {
+      const box = $('people-' + id);
+      if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+      const r = await api('/events/' + id + '/registrations');
+      if (!r.ok) { showMsg($('notice'), 'error', r.data.error || 'Could not load participants'); return; }
+      const list = r.data.registrations;
+      box.innerHTML = list.length === 0
+        ? '<div>No registrations yet.</div>'
+        : '<strong>' + list.length + ' registered</strong>' + list.map(p => `
+            <div>${esc(p.name)} &middot; ${esc(p.email)}<br>
+              <span class="ticket">${esc(p.enrollment_no || 'No enrollment no.')}
+              ${p.department ? ' &middot; ' + esc(p.department) : ''}${p.semester ? ' &middot; Sem ' + p.semester : ''}</span></div>`).join('');
+      box.classList.remove('hidden');
+    }
+
+    $('list').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const id = btn.dataset.id;
+      const action = btn.dataset.action;
+      $('notice').className = 'msg';
+
+      if (action === 'people') return showPeople(id);
+
+      if (action === 'delete') {
+        if (!confirm('Delete this event and all its registrations?')) return;
+        const r = await api('/events/' + id, { method: 'DELETE' });
+        if (!r.ok) return showMsg($('notice'), 'error', r.data.error || 'Could not delete');
+        showMsg($('notice'), 'ok', 'Event deleted');
+        return loadList();
+      }
+
+      btn.disabled = true;
+      const r = action === 'register'
+        ? await api('/events/' + id + '/register', { method: 'POST' })
+        : await api('/events/' + id + '/register', { method: 'DELETE' });
+      if (!r.ok) {
+        showMsg($('notice'), 'error', r.data.error || 'Something went wrong');
+        btn.disabled = false;
+      } else {
+        showMsg($('notice'), 'ok', action === 'register' ? 'You are registered for this event' : 'Registration cancelled');
+      }
+      loadList();
+    });
+
+    $('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $('msg').className = 'msg';
+      $('submitBtn').disabled = true;
+
+      const r = await api('/events', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: $('title').value,
+          description: $('description').value,
+          event_date: $('date').value,
+          event_time: $('time').value,
+          location: $('location').value,
+          capacity: $('capacity').value,
+        }),
+      });
+      $('submitBtn').disabled = false;
+
+      if (!r.ok) return showMsg($('msg'), 'error', r.data.error || 'Could not create event');
+      showMsg($('msg'), 'ok', 'Event created');
+      $('form').reset();
+      loadList();
+    });
+
+    $('logoutBtn').addEventListener('click', logout);
+
+    (async () => {
+      const user = await requireLogin();
+      if (!user) return;
+      isAdmin = user.role === 'admin';
+      $('who').textContent = user.name;
+      buildNav(user.role);
+      if (isAdmin) $('createCard').classList.remove('hidden');
+      loadList();
+    })();
+  </script>
+</body>
+</html>
