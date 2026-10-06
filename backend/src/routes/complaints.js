@@ -35,8 +35,8 @@ const listRules = [
 
 const idRules = [param('id').isInt({ min: 1 }).withMessage('Invalid complaint id')];
 
-// POST /api/complaints: a student submits a new complaint
-router.post('/', requireRole('student'), createRules, validate, async (req, res, next) => {
+// POST /api/complaints: a student or teacher submits a new complaint
+router.post('/', requireRole('student', 'teacher'), createRules, validate, async (req, res, next) => {
   const client = await pool.connect();
   try {
     const { category_id, title, description } = req.body;
@@ -78,13 +78,13 @@ router.post('/', requireRole('student'), createRules, validate, async (req, res,
   }
 });
 
-// GET /api/complaints: students see their own, admins see all (with search and filters)
+// GET /api/complaints: students and teachers see their own, admins see all (with search and filters)
 router.get('/', listRules, validate, async (req, res, next) => {
   try {
     const params = [];
     const where = [];
 
-    if (req.user.role === 'student') {
+    if (req.user.role !== 'admin') {
       params.push(req.user.id);
       where.push(`c.user_id = $${params.length}`);
     }
@@ -143,8 +143,8 @@ router.get('/:id', idRules, validate, async (req, res, next) => {
     );
 
     const complaint = found.rows[0];
-    // A student can open only their own complaint. Others get "not found".
-    if (!complaint || (req.user.role === 'student' && complaint.user_id !== req.user.id)) {
+    // Only the owner or an admin can open a complaint. Others get "not found".
+    if (!complaint || (req.user.role !== 'admin' && complaint.user_id !== req.user.id)) {
       return res.status(404).json({ error: 'Complaint not found' });
     }
 
