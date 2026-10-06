@@ -5,13 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>KDP CampusOS | Dashboard</title>
   <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    .stars { display: flex; gap: 4px; margin: 6px 0; }
+    .stars .star { background: none; border: 0; font-size: 2.2rem; color: #475569; cursor: pointer; padding: 0 2px; line-height: 1; }
+    .stars .star.on { color: var(--warn); }
+    .rated { color: var(--warn); letter-spacing: 2px; }
+  </style>
 </head>
 <body>
   <header class="topbar">
-<span>
-  <span class="brand"><img src="/img/logo.jpg" alt="KDP logo" />KDP CampusOS</span>
-  <span class="nav">&nbsp;<a href="/dashboard.html" class="active">Dashboard</a><a href="/announcements.html">Announcements</a><a href="/events.html">Events</a></span>
-</span>
+    <span>
+      <span class="brand"><img src="/img/logo.jpg" alt="KDP logo" />KDP CampusOS</span>
+      <span class="nav">&nbsp;<a href="/dashboard.html" class="active">Dashboard</a><a href="/announcements.html">Announcements</a><a href="/events.html">Events</a></span>
+    </span>
+    <span>
       <span class="who" id="who"></span>
       <button class="btn secondary" id="logoutBtn" type="button">Logout</button>
     </span>
@@ -110,6 +117,51 @@
       renderList();
     }
 
+    function feedbackHtml(c, feedback) {
+      if (feedback) {
+        return `<p><strong>Your rating:</strong>
+          <span class="rated">${'★'.repeat(feedback.rating)}${'☆'.repeat(5 - feedback.rating)}</span>
+          ${esc(feedback.comment || '')}</p>`;
+      }
+      if (c.status !== 'Resolved') return '';
+      return `
+        <h2>Rate this resolution</h2>
+        <div class="stars" id="stars">
+          ${[1, 2, 3, 4, 5].map(n => `<button type="button" class="star" data-v="${n}">&#9733;</button>`).join('')}
+        </div>
+        <label for="fbComment">Comment (optional)</label>
+        <input id="fbComment" maxlength="500" placeholder="How was the service?" />
+        <button class="btn block" id="fbBtn" type="button">Submit feedback</button>
+        <div id="fbMsg" class="msg"></div>`;
+    }
+
+    function wireFeedback(c) {
+      const stars = $('stars');
+      if (!stars) return;
+      let rating = 0;
+
+      stars.addEventListener('click', (e) => {
+        const b = e.target.closest('.star');
+        if (!b) return;
+        rating = Number(b.dataset.v);
+        Array.from(stars.children).forEach(s => s.classList.toggle('on', Number(s.dataset.v) <= rating));
+      });
+
+      $('fbBtn').addEventListener('click', async () => {
+        if (!rating) return showMsg($('fbMsg'), 'error', 'Select a star rating first');
+        $('fbBtn').disabled = true;
+        const r = await api('/feedback', {
+          method: 'POST',
+          body: JSON.stringify({ complaint_id: c.id, rating, comment: $('fbComment').value }),
+        });
+        if (!r.ok) {
+          $('fbBtn').disabled = false;
+          return showMsg($('fbMsg'), 'error', r.data.error || 'Could not submit feedback');
+        }
+        openDetail(c.id);
+      });
+    }
+
     async function openDetail(id) {
       const r = await api('/complaints/' + id);
       if (!r.ok) return;
@@ -129,8 +181,9 @@
               <div class="ticket">${fmtDate(t.created_at)}${t.updated_by_name ? ' &middot; ' + esc(t.updated_by_name) : ''}</div>
             </li>`).join('')}
         </ul>
-        ${feedback ? `<p><strong>Your rating:</strong> ${feedback.rating}/5 ${esc(feedback.comment || '')}</p>` : ''}`;
+        ${feedbackHtml(c, feedback)}`;
 
+      wireFeedback(c);
       $('detailCard').classList.remove('hidden');
       $('detailCard').scrollIntoView({ behavior: 'smooth' });
     }
